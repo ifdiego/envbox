@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+trap "tput cnorm 2>/dev/null; exit" INT TERM EXIT
 
 # ensure ffmpeg is available in PATH
 if ! command -v ffmpeg &> /dev/null; then
@@ -31,7 +32,7 @@ for file in "${inputs[@]}"; do
     if [[ -f "$file" ]] && is_video "$file" && [[ "$file" != compressed/* ]]; then
         videos+=("$file")
     else
-        echo "[skipping]: $file (not a supported video file)"
+        echo "[skip]: $file (not a supported video file)"
     fi
 done
 
@@ -48,9 +49,17 @@ for video in "${videos[@]}"; do
     filename=$(basename -- "$video")
     output="compressed/$filename"
 
-    echo "[info]: compressing: $filename"
-    ffmpeg -i "$video" -vcodec libx265 -crf 28 "$output"
-    echo "[done]: finished: $output"
+    ffmpeg -i "$video" -vcodec libx265 -crf 28 "$output" 2>/dev/null &
+    pid=$!
+    start=$(date +%s)
+
+    tput civis 2>/dev/null # hide cursor
+    while kill -0 "$pid" 2>/dev/null; do
+        elapsed=$(( $(date +%s) - start ))
+        printf "\r[info]: compressing %s (%02ds)" "$filename" "$elapsed"
+        sleep 0.1
+    done
+    printf "\r[done]: compressing %s\n" "$filename"
 done
 
 echo "[done]: all videos compressed successfully"
